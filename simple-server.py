@@ -15,5 +15,5 @@ if __name__ == '__main__':
     endp = "@tcp::2014"
     setting = {}
     setting['debug'] = True
-    setting['endpoints'] = (endp, )
+    setting['endpoint'] = endp
     engine.make_easy_engine('simple-server', SimpleServant, setting).serve_forever()

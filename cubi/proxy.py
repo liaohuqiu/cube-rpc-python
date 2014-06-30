@@ -374,7 +374,7 @@ class Proxy(object):
             result.set(msg)
 
     def emit_query(self, qid, method, params):
-        logger.get_logger().debug('emit_query: %s %s %s', qid, method, params)
+        logger.get_logger().debug('emit_query: qid=%d, method=%s, params=%s', qid, method, params)
         self._send_queue.put((qid, method, params))
 
     def request_many(self, reqs):
@@ -419,6 +419,7 @@ class Proxy(object):
             msg = ar.get()
             if msg.status:
                 raise Error(qid, msg.status, msg.data)
+            logger.get_logger().debug('result: qid=%d, result=%s', msg.qid, msg.data)
             return msg.data
 
 def parse_endpoint(endpoint):

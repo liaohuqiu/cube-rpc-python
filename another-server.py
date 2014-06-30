@@ -54,5 +54,5 @@ if __name__ == '__main__':
     endp = "another-server@tcp::2015"
     setting = {}
     setting['debug'] = True
-    setting['endpoints'] = (endp, )
+    setting['endpoint'] = endp
     engine.make_easy_engine('another-server', AnotherServant, setting).serve_forever()

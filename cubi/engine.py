@@ -28,11 +28,11 @@ class Adapter(object):
     def __init__(self, name, setting):
         self._name = name
 
-        endpoints = setting.get('endpoints', None)
-        if not endpoints:
-                raise EngineError('not endpoints in config')
+        endpoint = setting.get('endpoint', None)
+        if not endpoint:
+                raise EngineError('not endpoint in config')
 
-        self._endpoints = endpoints
+        self._endpoint = endpoint
         self._query_queue = Queue()
         self._servants = {}
         self._servers = []
@@ -43,7 +43,7 @@ class Adapter(object):
 
     def __repr__(self):
         p = {}
-        p['endpoints'] = self._endpoints
+        p['endpoint'] = self._endpoint
         p['servants'] = self._servants.keys()
         return str(p)
 
@@ -69,7 +69,7 @@ class Adapter(object):
         exdict['exception'] = repr(exctype)
         exdict['code'] = 1
         exdict['message'] = repr(exmsg)
-        exdict['raiser'] = query.service + "." + query.method  + self._endpoints
+        exdict['raiser'] = query.method + "*" + query.service  + self._endpoint
         exdict['detail'] = {}
         exdict['detail']['what'] = repr(traceback.extract_tb(tb))
         return exdict
@@ -95,8 +95,8 @@ class Adapter(object):
             exdict = {}
             exdict['exception'] = 'ServantNotFound'
             exdict['code'] = 1
-            exdict['message'] = "servant %s not found in adapter %s" % (query.service, self._endpoints)
-            exdict['raiser'] = self._endpoints
+            exdict['message'] = "servant %s not found in adapter %s" % (query.service, self._endpoint)
+            exdict['raiser'] = self._endpoint
             if query.qid:
                 query.inbox.put(Answer(query.qid, 1, exdict))
             else:
@@ -116,8 +116,8 @@ class Adapter(object):
             exdict = {}
             exdict['exception'] = 'MethodNotFound'
             exdict['code'] = 1
-            exdict['message'] = "servant %s do no have method %s in adapter %s" % (query.service, query.method, self._endpoints)
-            exdict['raiser'] = self._endpoints
+            exdict['message'] = "servant %s do no have method %s in adapter %s" % (query.service, query.method, self._endpoint)
+            exdict['raiser'] = self._endpoint
             if query.qid:
                 query.inbox.put(Answer(query.qid, 100, exdict))
             else:
@@ -155,22 +155,17 @@ class Adapter(object):
             gevent.spawn(self.servant_worker)
 
         pool = Pool(self._accept_pool_num)
-        for endpoint in self._endpoints:
-            endpoint = endpoint.strip()
-            if not endpoint:
-                continue
-            try:
-                service, proto, host, port = proxy.parse_endpoint(endpoint)
-                if proto != 'tcp':
-                    raise proxy.Error(1, 'only tcp server supported now')
-                server = StreamServer((host, int(port)), self.sokect_handler, spawn=pool)
-                logger.get_logger().debug('adapter start %s', endpoint)
-                self._servers.append(server)
-                server.start()
-            except ValueError:
-                logger.get_logger().error('invalid endpoint %s', endpoint)
-            except:
-                logger.get_logger().error('start adapter fail %s', endpoint, exc_info = 1)
+        endpoint = self._endpoint
+        try:
+            service, proto, host, port = proxy.parse_endpoint(endpoint)
+            if proto != 'tcp':
+                raise proxy.Error(1, 'only tcp server supported now')
+            server = StreamServer((host, int(port)), self.sokect_handler, spawn=pool)
+            logger.get_logger().debug('adapter start %s', endpoint)
+            self._servers.append(server)
+            server.start()
+        except:
+            logger.get_logger().error('start adapter fail %s', endpoint, exc_info = 1)
 
     def deactivate(self):
         for server in self._servers:

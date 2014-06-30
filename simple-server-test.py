@@ -13,4 +13,4 @@ if __name__ == '__main__':
 
     data = {'time': time.time()}
     r = prx.request('hello', data)
-    print r
+    logger.get_logger().debug('result: %s', r)
