@@ -177,17 +177,14 @@ class Error(Exception):
 
 class Proxy(object):
 
-    default_timeout = 60000
-
-    def __init__(self, end_point, diag=False, welcome=True):
+    def __init__(self, end_point, debug=False, timeout = 6000, welcome=True):
         self.end_point = end_point
-        self.diag = diag
+        self.debug = debug
         self.welcome = welcome
 
         self.service, self.protocol, self.host, self.port = parse_endpoint(end_point)
 
-        # TODO timeout
-        self.timeout = self.default_timeout
+        self.timeout = timeout
 
         self.socket = None
         self.reset()
@@ -224,7 +221,7 @@ class Proxy(object):
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.socket.connect((self.host, self.port))
-        if self.diag:
+        if self.debug and logger.is_debug():
             ip, port = self.socket.getsockname()
             logger.get_logger().debug('address = %s:%d' % (ip, port))
 
@@ -233,11 +230,8 @@ class Proxy(object):
             if type != MESSAGE_TYPE_WELCOME:
                 raise Exception('Imcomplete message')
 
-            if self.diag:
+            if self.debug and logger.is_debug():
                 logger.get_logger().debug('S.WELCOME')
-
-    def diagnose(self, diag=True):
-        self.diag = diag
 
     def unitive_send(self, data):
         self.socket.sendall(data)
@@ -250,14 +244,14 @@ class Proxy(object):
         if qid:
             self.pending[qid] = time.time()
 
-        if self.diag:
+        if self.debug and logger.is_debug():
             logger.get_logger().debug('CQ:%d service=%s method=%s params=%s', qid, self.service, method, params)
 
         self.unitive_send(Messager.data_for_query(qid, self.service, method, params))
         return qid
 
     def send_answer(self, qid, status, data):
-        if self.diag:
+        if self.debug and logger.is_debug():
             logger.get_logger().debug('CA:%d %d %s', qid, status, data)
         self.unitive_send(Messager.data_for_answer(qid, status, data))
 
@@ -269,7 +263,7 @@ class Proxy(object):
             pkt, address = self.unitive_recvfrom(65535)
             message = Messager.message_from_data(pkt)
 
-        if self.diag:
+        if self.debug and logger.is_debug():
             if isinstance(message, Query):
                 logger.get_logger().debug('SQ:%d method=%s, params=%s', message.qid, message.method, message.params)
             elif isinstance(message, Answer):

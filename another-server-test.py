@@ -45,7 +45,7 @@ def start_test(endp):
     print 'stress test ok'
 
 if __name__ == '__main__':
-    logger.enable_debug_log()
+    # logger.enable_debug_log()
     endp = "another-server@tcp::2015"
     print 'start test for ', endp
     basic_test(endp)

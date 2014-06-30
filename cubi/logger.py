@@ -11,7 +11,7 @@ except ImportError:
 class Logger:
 
     _logger = None
-    debug = False
+    _debug = False
 
     @staticmethod
     def get_instance():
@@ -20,7 +20,11 @@ class Logger:
         return Logger._logger
 
 def enable_debug_log():
+    Logger._debug = True
     Logger._logger = get_console_logger(logging.DEBUG)
+
+def is_debug():
+    return Logger._debug
 
 def get_logger():
     return Logger.get_instance()

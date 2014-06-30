@@ -32,6 +32,7 @@ class Adapter(object):
         if not endpoint:
                 raise EngineError('not endpoint in config')
 
+        self.debug = setting.get('debug', False)
         self._endpoint = endpoint
         self._query_queue = Queue()
         self._servants = {}
@@ -75,7 +76,8 @@ class Adapter(object):
         return exdict
 
     def _handle_wildcard_servant(self, query):
-        logger.get_logger().debug('handle_wildcard_servant: %s', query)
+        if self.debug and logger.is_debug():
+            logger.get_logger().debug('handle_wildcard_servant: %s', query)
         try:
             result = self._wildcard_servant(query.service, query.method, query.params)
             if query.qid:
@@ -88,7 +90,8 @@ class Adapter(object):
                 query.inbox.put(Answer(query.qid, 1, self._make_exception_params(query)))
 
     def _handle_normal_servant(self, query):
-        logger.get_logger().debug('handle_normal_servant: %s', query)
+        if self.debug and logger.is_debug():
+            logger.get_logger().debug('handle_normal_servant: %s', query)
         servant = self._servants.get(query.service)
         if not servant:
             #build exception at params
@@ -161,7 +164,8 @@ class Adapter(object):
             if proto != 'tcp':
                 raise proxy.Error(1, 'only tcp server supported now')
             server = StreamServer((host, int(port)), self.sokect_handler, spawn=pool)
-            logger.get_logger().debug('adapter start %s', endpoint)
+            if self.debug and logger.is_debug():
+                logger.get_logger().debug('adapter start %s', endpoint)
             self._servers.append(server)
             server.start()
         except:
@@ -179,13 +183,16 @@ class Adapter(object):
                 logger.get_logger().error('invalid answer %s', answer)
                 continue
 
-            logger.get_logger().debug('%s: reply answer: %s', address, answer)
+            if self.debug and logger.is_debug():
+                logger.get_logger().debug('%s: reply answer: %s', address, answer)
             socket.sendall(answer.get_data())
 
-        logger.get_logger().debug('%s: answer fiber stop', address)
+        if self.debug and logger.is_debug():
+            logger.get_logger().debug('%s: answer fiber stop', address)
 
     def sokect_handler(self, socket, address):
-        logger.get_logger().debug('%s: accept connection', address)
+        if self.debug and logger.is_debug():
+            logger.get_logger().debug('%s: accept connection', address)
 
         # send welcome
         socket.sendall(Messager.data_for_welcome())
@@ -195,13 +202,15 @@ class Adapter(object):
             try:
                 message = Messager.receive_msg(socket)
                 if not message:
-                    logger.get_logger().debug('%s: connection has been closed by client.', address)
+                    if self.debug and logger.is_debug():
+                        logger.get_logger().debug('%s: connection has been closed by client.', address)
                     break;
                 if isinstance(message, Answer):
-                    logger.get_logger().debug('%s: unexpected message received: %s', address, message)
+                    logger.get_logger().error('%s: unexpected message received: %s', address, message)
                     continue
                 elif isinstance(message, Query):
-                    logger.get_logger().debug('%s: message received: %s', address, message)
+                    if self.debug and logger.is_debug():
+                        logger.get_logger().debug('%s: message received: %s', address, message)
                     message.inbox = conn_inbox
                     self._query_queue.put(message)
             except gevent.socket.error as ex:
@@ -211,15 +220,23 @@ class Adapter(object):
                 logger.get_logger().error('%s: exception: %s', address, traceback.format_exc())
                 break
 
-        logger.get_logger().debug('%s: close connection', address)
+        if self.debug and logger.is_debug():
+            logger.get_logger().debug('%s: close connection', address)
         socket.close()
         # stop answer thread
         conn_inbox.put(StopIteration)
 
 class Servant(object):
 
-    def _init(self, engine, adapter, setting):
-        pass
+    def __init__(self, setting):
+        self.setting = setting
+        self.debug = setting.get('debug', False)
+
+    """
+    Customized Servant implement this method to initialize
+    """
+    def _init(self, engine, adapter):
+        raise EngineError('You must implement _init(self, engine, adapter')
 
     def __reflection_service_methods__(self):
         """
@@ -257,7 +274,8 @@ class Engine(object):
         self._running = True
         self._adapters = {}
         self._proxies = {}
-        logger.get_logger().debug("application setting %s", setting)
+        if self.debug and logger.is_debug():
+            logger.get_logger().debug("application setting %s", setting)
 
     def create_proxy(self, endpoint):
         prx = proxy.Proxy(endpoint, self.debug)
@@ -313,8 +331,8 @@ def make_easy_engine(name, servant_class, conf = None):
     adapter = Adapter(name, setting)
     engine.add_adpater(adapter);
 
-    servant = servant_class()
-    servant._init(engine, adapter, setting)
+    servant = servant_class(setting)
+    servant._init(engine, adapter)
     adapter.add_servant(name, servant)
 
     return engine

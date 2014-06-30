@@ -1,5 +1,7 @@
 import sys
 import time
+import logging
+
 import cubi.engine as engine
 import cubi.logger as logger
 import cubi.params as params
@@ -7,7 +9,7 @@ from cubi.engine import Servant;
 
 class AnotherServant(Servant):
 
-    def _init(self, engine, adapter, setting):
+    def _init(self, engine, adapter):
         self._simple_server = engine.create_proxy('simple-server@tcp::2014')
 
     def hello(self, params):
@@ -49,7 +51,12 @@ class AnotherServant(Servant):
 
 if __name__ == '__main__':
 
-    logger.enable_debug_log()
+    # product logger level
+    log = logger.get_console_logger(logging.DEBUG)
+    logger.set_logger(log)
+
+    # deubg logger level
+    # logger.enable_debug_log()
 
     endp = "another-server@tcp::2015"
     setting = {}
