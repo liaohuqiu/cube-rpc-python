@@ -2,11 +2,11 @@ from setuptools import setup, find_packages
 
 setup(
     name = 'cubi',
-    version = '0.0.3',
+    version = '0.0.4',
     keywords = ('cube', 'cubi', 'cube-rpc'),
     description = 'python implementation for Cube RPC protocol',
     license = 'MIT License',
-    install_requires = ['bp>=0.0.3'],
+    install_requires = ['bp', 'gevent'],
 
     author = 'http://www.liaohuqiu.net',
     author_email = 'liaohuqiu@gmail.com',
