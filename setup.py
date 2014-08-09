@@ -8,7 +8,7 @@ setup(
     license = 'MIT License',
     install_requires = ['bp', 'gevent'],
 
-    scripts = ['simple-server', 'simple-server-test', 'another-server', 'another-server-test'],
+    scripts = ['cubi-simple-server', 'cubi-simple-server-test', 'cubi-another-server', 'cubi-another-server-test'],
 
     author = 'http://www.liaohuqiu.net',
     author_email = 'liaohuqiu@gmail.com',
