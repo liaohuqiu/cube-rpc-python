@@ -12,7 +12,7 @@ from gevent.queue import Queue, Empty
 from gevent.event import AsyncResult
 import gevent.monkey
 #patch_all() patch_thread() may cause thread exception at the end of app
-gevent.monkey.patch_all()
+gevent.monkey.patch_all(thread=False)
 
 import logger
 import proxy
