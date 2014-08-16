@@ -49,7 +49,7 @@ def start_test(endp):
 if __name__ == '__main__':
     # logger.enable_debug_log()
     endp = "another-server@tcp::2015"
-    print 'start test for ', endp
-    basic_test(endp)
-    # start_test(endp)
-    # print 'basic test ok'
+    # print 'start test for ', endp
+    # basic_test(endp)
+    start_test(endp)
+    print 'basic test ok'

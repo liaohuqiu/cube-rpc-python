@@ -1,5 +1,6 @@
 #! /bin/env python
 
+import time
 import cubi.engine as engine
 import cubi.logger as logger
 import cubi.params as params
@@ -50,6 +51,7 @@ class AnotherServant(Servant):
 if __name__ == '__main__':
 
     # product logger level
+    import logging
     log = logger.get_console_logger(logging.DEBUG)
     logger.set_logger(log)
 
