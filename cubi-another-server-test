@@ -11,6 +11,7 @@ import cubi.logger as logger
 def basic_test(endpoint):
 
     prx = proxy.Proxy(endpoint)
+    prx.start()
 
     data = {'time': time.time()}
     r = prx.request('hello', data)

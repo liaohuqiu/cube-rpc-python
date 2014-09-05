@@ -24,21 +24,21 @@ class Messager:
 
     @staticmethod
     def data_for_welcome():
-        return struct.pack('<2s2B', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME)
+        return struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME, 0)
 
     @staticmethod
     def data_for_close():
-        return struct.pack('<2s2B', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME)
+        return struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME, 0)
 
     @staticmethod
     def data_for_query(qid, service, method, params):
-        s = bp.encode((qid, service, method, params))
+        s = bp.pack((qid, service, method, params))
         header = struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_QUERY, len(s))
         return header + str(s)
 
     @staticmethod
     def data_for_answer(qid, status, data):
-        s = bp.encode((qid, status, data))
+        s = bp.pack((qid, status, data))
         header = struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_ANSWER, len(s))
         return header + str(s)
 
@@ -53,21 +53,19 @@ class Messager:
         return data
 
     @staticmethod
-    def receive_msg_type(socket):
-        header_str = Messager.receive_data(socket, 4)
+    def receive_msg(socket, want_type = -1):
+        header_str = Messager.receive_data(socket, 8)
         if not header_str:
             return None
 
-        header = struct.unpack('<2s2B', header_str)
+        header = struct.unpack('<2s2Bi', header_str)
         if header[0] != MESSAGE_MAGIC or header[1] != MESSAGE_VER:
             return None
-        return header[2]
 
-    @staticmethod
-    def receive_msg(socket):
-        type = Messager.receive_msg_type(socket)
+        type = header[2]
+        len = header[3]
 
-        if not type:
+        if want_type != -1 and type != type:
             return None
 
         if type == MESSAGE_TYPE_WELCOME:
@@ -75,14 +73,8 @@ class Messager:
         elif type == MESSAGE_TYPE_CLOSE:
             return Close()
 
-        len_str = Messager.receive_data(socket, 4)
-        if not len_str:
-            return None
-        len = struct.unpack('<i', len_str)
-        len = len[0]
-
         body = Messager.receive_data(socket, len)
-        data = bp.decode(body)
+        data = bp.unpack(body)[1:]
 
         if type == MESSAGE_TYPE_QUERY:
             return Query.from_receive(data)
@@ -111,7 +103,7 @@ class Messager:
             return None
         odata = pkt[8:8+size]
 
-        data = bp.decode(odata)
+        data = bp.unpack(odata)[1:]
         if type == MESSAGE_TYPE_QUERY:
             return Query.from_receive(data)
         elif type == MESSAGE_TYPE_ANSWER:
@@ -186,28 +178,35 @@ class Proxy(object):
 
         self.timeout = timeout
 
-        self.socket = None
         self.reset()
 
     def stop(self):
 
-        self._running = False
-        self._connected = False
-        self._recv_thread = None
-        self._reap_thread = None
-
         if self.socket:
             self.socket.close()
-        self.socket = None
+        self.reset()
 
     def reset(self):
+
+        self.socket = None
         self.last_id = 0
+
+        self._running = False
+        self._connected = False
+
+        self._recv_thread = None
+        self._reap_thread = None
+        self._send_thread = None
+
         self.pending = {}
         self._query_list = {}
         self._send_queue = Queue()
+
+    def start(self):
+
         self._send_thread = gevent.spawn(self.send_fiber)
+        self._recv_thread = gevent.spawn(self.recv_fiber)
         self._reap_thread = gevent.spawn(self.reap_fiber)
-        self._connected = False
         self._running = True
 
     def next_qid(self):
@@ -226,8 +225,9 @@ class Proxy(object):
             logger.get_logger().debug('address = %s:%d' % (ip, port))
 
         if self.welcome:
-            type = Messager.receive_msg_type(self.socket)
-            if type != MESSAGE_TYPE_WELCOME:
+            msg = Messager.receive_msg(self.socket, MESSAGE_TYPE_WELCOME)
+
+            if not msg:
                 raise Exception('Imcomplete message')
 
             if self.debug and logger.is_debug():
@@ -240,7 +240,12 @@ class Proxy(object):
         data = self.socket.recvfrom(recvlen)
         return data
 
-    def send_quest(self, qid, method, params, twoway=True):
+    def _send_quest(self, qid, method, params):
+
+        if not self._connected:
+            self.connect()
+            self._connected = True
+
         if qid:
             self.pending[qid] = time.time()
 
@@ -308,11 +313,8 @@ class Proxy(object):
             qid = None
             try:
                 qid, method, params = self._send_queue.get()
-                if not self._connected:
-                    self.connect()
-                    self._connected = True
-                    self._recv_thread = gevent.spawn(self.recv_fiber)
-                self.send_quest(qid, method, params)
+                self._send_quest(qid, method, params)
+
             except:
                 self.stop()
                 self._fail_quests()
@@ -335,7 +337,8 @@ class Proxy(object):
                         self._query_list[msg.qid].set(msg)
                         del self._query_list[msg.qid]
                     else:
-                        logger.get_logger().error('proxy %s get unexpected answer %s. qid may be removed for timeout', self.end_point, msg)
+                        logger.get_logger().error(  \
+                                'proxy %s get unexpected answer %s. qid may be removed for timeout', self.end_point, msg)
             except Error as ex:
                 if self._query_list.get(ex.qid):
                     msg = Answer(ex.qid, ex.status, ex.params)
@@ -399,6 +402,26 @@ class Proxy(object):
                     yield Error(qid, msg.status, msg.params), idx
                 else:
                     yield msg.data, idx
+
+    def request_blocking(self, method, params):
+        qid = self.next_qid()
+        self._send_quest(qid, method, params)
+        try:
+            msg = self.receive_next_msg()
+            if msg == None:
+                raise EngineError('Received nothing')
+            if isinstance(msg, Query):
+                raise EngineError('Recieved unexpected Query')
+            else :
+                return msg.data
+
+        except Error as ex:
+            if self._query_list.get(ex.qid):
+                msg = Answer(ex.qid, ex.status, ex.params)
+                return msg
+        except:
+            self.stop()
+        return None
 
     def request(self, method, params, twoway = True):
         ar = AsyncResult()

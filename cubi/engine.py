@@ -70,7 +70,7 @@ class Adapter(object):
         exdict['exception'] = repr(exctype)
         exdict['code'] = 1
         exdict['message'] = repr(exmsg)
-        exdict['raiser'] = query.method + "*" + query.service  + self._endpoint
+        exdict['raiser'] = query.method + "*" + query.service + "@" + self._endpoint
         exdict['detail'] = {}
         exdict['detail']['what'] = repr(traceback.extract_tb(tb))
         return exdict

@@ -43,11 +43,9 @@ The header of Welcome and Close is 4 bytes long. does not have body_size.
     MESSAGE_TYPE_QUEST          = 0x03
     MESSAGE_TYPE_ANSWER         = 0x04
 
-#### Body
+### Body
 
 #### Requset Body
-
-A list:
 
     integer rid;
     string  service;
@@ -55,8 +53,6 @@ A list:
     dict    params;
 
 #### Answer Body
-
-A list:
 
     integer rid;
     integer status;

@@ -10,11 +10,14 @@ if __name__ == '__main__':
 
     logger.enable_debug_log()
 
-    endp = "simple-server@tcp::2014"
+    endp = 'placeholderServer@tcp::16512'
     print 'start test for ', endp
     prx = proxy.Proxy(endp, True)
-    prx.start()
 
-    data = {'time': time.time()}
-    r = prx.request('hello', data)
-    logger.get_logger().debug('result: %s', r)
+    data = {'time': "xxx"}
+    r = prx.request_blocking('r', data)
+    print(r)
+
+    prx.start();
+    r = prx.request('r', data)
+    print(r)
