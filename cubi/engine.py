@@ -37,10 +37,22 @@ class Adapter(object):
         self._query_queue = Queue()
         self._servants = {}
         self._servers = []
+
         self._servant_worker_num = setting.get('servant_num', 512)
         self._accept_pool_num = setting.get('accept_pool_size', 512)
         self._running = True
         self._wildcard_servant = None
+
+        self.__process_client_ips(setting)
+
+    def __process_client_ips(self, setting):
+        ips = setting.get('client_ips', [])
+        client_ips = {}
+        for ip in ips:
+            client_ips[ip] = True
+
+        self._client_ips = client_ips
+        self._client_ips_len = len(self._client_ips)
 
     def __repr__(self):
         p = {}
@@ -191,6 +203,14 @@ class Adapter(object):
             logger.get_logger().debug('%s: answer fiber stop', address)
 
     def sokect_handler(self, socket, address):
+        if self._client_ips_len > 0:
+            ip, port = address
+            if not ip in self._client_ips:
+                if self.debug and logger.is_debug():
+                    logger.get_logger().debug('%s: accept connection, but this address is not allowed', address)
+                socket.close()
+                return
+
         if self.debug and logger.is_debug():
             logger.get_logger().debug('%s: accept connection', address)
 
