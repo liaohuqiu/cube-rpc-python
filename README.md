@@ -4,12 +4,12 @@
 
 There are four kinds of message:
 
-*   Requset   (From client to server)
+*   Query   (From client to server)
 *   Answer  (From server to client)
 *   Welcome (From server to client)
 *   Close   (client to server, or server to client)
 
-All the messages contain a header, but only `Requset` and `Answer` contain a body.
+All the messages contain a header, but only `Query` and `Answer` contain a body.
 
 When the server receive a new connection, it must send the `Welcome` message to the client.
 
@@ -40,16 +40,16 @@ The header of Welcome and Close is 4 bytes long. does not have body_size.
 
     MESSAGE_TYPE_WELCOME        = 0x01
     MESSAGE_TYPE_CLOSE          = 0x02
-    MESSAGE_TYPE_QUEST          = 0x03
+    MESSAGE_TYPE_QUERY          = 0x03
     MESSAGE_TYPE_ANSWER         = 0x04
 
 #### Body
 
-#### Requset Body
+#### Query Body
 
 A list:
 
-    integer rid;
+    integer qid;
     string  service;
     string  method;
     dict    params;
@@ -58,7 +58,7 @@ A list:
 
 A list:
 
-    integer rid;
+    integer qid;
     integer status;
     dict    data;
 

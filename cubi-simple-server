@@ -21,11 +21,12 @@ if __name__ == '__main__':
     # logger.set_logger(log)
 
     # deubg logger level
-    logger.enable_debug_log()
+    # logger.enable_debug_log()
 
     endp = "@tcp:0.0.0.0:2014"
     setting = {}
     setting['debug'] = True
+    setting['debug'] = False
     setting['endpoint'] = endp
     setting['client_ips'] = ['127.0.0.1', '192.168.154.102'];
     engine.make_easy_engine('simple-server', SimpleServant, setting).serve_forever()
