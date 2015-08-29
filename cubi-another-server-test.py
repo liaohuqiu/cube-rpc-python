@@ -1,7 +1,6 @@
 #! /bin/env python
 
 import time
-from gevent.pool import Pool
 import gevent.monkey
 gevent.monkey.patch_all()
 
@@ -34,22 +33,9 @@ def basic_test(endpoint):
     r = prx.request('hello_all', {'msgs' : [{'a': 1234, }, {'b': 1234, }, {'c': 1234, }]})
     print r
 
-def stress_test(endp):
-    pool = Pool(128)
-    for _ in range(1024):
-        pool.spawn(basic_test, endp)
-
-def start_test(endp):
+if __name__ == '__main__':
+    logger.enable_debug_log()
+    endp = "another-server@tcp::2015"
     print 'start test for ', endp
     basic_test(endp)
-    print 'basic test ok'
-    stress_test(endp)
-    print 'stress test ok'
-
-if __name__ == '__main__':
-    # logger.enable_debug_log()
-    endp = "another-server@tcp::2015"
-    # print 'start test for ', endp
-    # basic_test(endp)
-    start_test(endp)
     print 'basic test ok'

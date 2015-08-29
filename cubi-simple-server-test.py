@@ -1,10 +1,11 @@
 #! /bin/env python
 import time
 
-import gevent.monkey
-gevent.monkey.patch_all(thread=False)
 import cubi.proxy as proxy
 import cubi.logger as logger
+
+import gevent.monkey
+gevent.monkey.patch_all()
 
 if __name__ == '__main__':
 
@@ -17,3 +18,4 @@ if __name__ == '__main__':
     data = {'time': time.time()}
     r = prx.request('hello', data)
     logger.get_logger().debug('result: %s', r)
+    print 'result: %s' % r

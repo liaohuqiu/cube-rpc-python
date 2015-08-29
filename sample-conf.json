@@ -1,7 +1,0 @@
-{
-    "debug": true,
-    "endpoint": "android-gems@tcp:0.0.0.0:2099",
-    "servant_num": 512,
-    "accept_pool_size": 512,
-    "client_ips": ["127.0.0.1", "10.163.16.84"]
-}

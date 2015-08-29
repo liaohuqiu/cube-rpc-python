@@ -5,6 +5,7 @@ import traceback
 import time
 import socket
 import json
+
 import gevent
 from gevent.server import StreamServer
 from gevent.pool import Pool
@@ -15,6 +16,7 @@ import gevent.monkey
 gevent.monkey.patch_all(thread=False)
 
 import logger
+import logging
 import proxy
 import params
 from proxy import Query, Answer, Messager
@@ -30,7 +32,7 @@ class Adapter(object):
 
         endpoint = setting.get('endpoint', None)
         if not endpoint:
-                raise EngineError('not endpoint in config')
+            raise EngineError('not endpoint in config')
 
         self.debug = setting.get('debug', False)
         self._endpoint = endpoint
@@ -255,8 +257,8 @@ class Servant(object):
     """
     Customized Servant implement this method to initialize
     """
-    def _init(self, engine, adapter):
-        raise EngineError('You must implement _init(self, engine, adapter')
+    def init(self, engine, adapter, setting):
+        raise EngineError('You must implement init(self, engine, adapter')
 
     def __reflection_service_methods__(self):
         """
@@ -323,36 +325,3 @@ class Engine(object):
             p['adapters'] = self._adapters
             logger.get_logger().critical("THROB %s", str(p))
             gevent.sleep(60)
-
-def json_load_conf(conf):
-    buffer = ''
-    for ln in open(conf):
-        ln = ln.strip()
-        if ln.startswith('#') or ln.startswith("//") or ln.startswith(';'):
-            continue
-        else:
-            buffer += ln
-    return json.loads(buffer)
-
-def make_easy_engine(name, servant_class, conf = None):
-    if not conf:
-        if len(sys.argv) == 1:
-            print "Usage:", sys.argv[0], "conf"
-            sys.exit(1)
-        conf = sys.argv[1]
-
-    if type(conf) == dict:
-        setting = conf
-    else:
-        setting = json_load_conf(conf)
-
-    engine = Engine(setting)
-
-    adapter = Adapter(name, setting)
-    engine.add_adpater(adapter);
-
-    servant = servant_class(setting)
-    servant._init(engine, adapter)
-    adapter.add_servant(name, servant)
-
-    return engine
