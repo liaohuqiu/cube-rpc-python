@@ -16,7 +16,7 @@ python setup.py install
 
 # Implement a service
 
-* Implement: 
+* Code for service: 
 
     Here is a simple service, this service just return what client send to server.
 
@@ -46,7 +46,7 @@ python setup.py install
     python cubi-simple-server.py cubi-simple-server.conf
     ```
 
-* Test it!
+* Code for client:
 
     [`cubi-simple-server-test.py`](https://github.com/liaohuqiu/cube-rpc-python/blob/master/cubi-simple-server-test.py)
 
@@ -70,7 +70,11 @@ python setup.py install
         print 'result: %s' % r
     ```
 
+    Run it: `python cubi-simple-server-test.py`
+
 ### Config file
+
+An example:
 
 ```
 {
@@ -84,9 +88,6 @@ python setup.py install
     }
 }
 ```
-
-#### Log Level
-
 
 * endpoint
 
@@ -126,7 +127,6 @@ python setup.py install
 * app
 
     The config for application.
-
 
 ### License
 
