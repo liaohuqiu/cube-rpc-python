@@ -12,7 +12,9 @@ import json
 import engine
 import proxy
 import params
-import logger
+import logger as cubelog
+from cpbox.tool import utils
+from cpbox.tool import logger as cplogger
 
 def json_load_conf(conf):
     buffer = ''
@@ -24,39 +26,19 @@ def json_load_conf(conf):
             buffer += ln
     return json.loads(buffer)
 
-def make_easy_engine(servant_class, conf = None):
-    if not conf:
-        if len(sys.argv) == 1:
-            print "Usage:", sys.argv[0], "conf"
-            sys.exit(1)
-        conf = sys.argv[1]
+def make_easy_engine(servant_class):
+    if len(sys.argv) == 1:
+        print 'Usage: python %s config-file.yml' % sys.argv[0]
+        sys.exit(1)
 
-    # config
-    if type(conf) == dict:
-        setting = conf
-    else:
-        setting = json_load_conf(conf)
-
-    # debug
-    if 'debug' in setting and setting['debug']:
-        logger.enable_debug_log()
-
-    # console_log_level
-    if 'console_log_level' in setting:
-        console_log_level = setting['console_log_level'].lower()
-        log_level_conf = {
-            'debug': logging.DEBUG,
-            'info': logging.INFO,
-            'warning': logging.WARNING,
-            'warn': logging.WARNING,
-            'error': logging.ERROR,
-            'critical': logging.CRITICAL,
-        }
-        if console_log_level in log_level_conf:
-            console_log_level = log_level_conf[console_log_level]
-        else:
-            console_log_level = logging.WARNING
-        logger.set_logger(logger.get_console_logger(console_log_level))
+    setting = utils.load_yaml(sys.argv[1])
+    debug = setting.get('debug', False)
+    log_level = setting.get('log_level', 'info')
+    syslog_ng_server = os.environ.get('PUPPY_SYSLOG_NG_SERVER', None)
+    if debug:
+        log_level = 'debug'
+        cubelog.enable_debug_log()
+    cplogger.make_logger('cube-rpc', log_level, syslog_ng_server, True)
 
     # endpoint
     endpoint = setting.get('endpoint', None)

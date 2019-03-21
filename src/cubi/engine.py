@@ -44,22 +44,15 @@ class Adapter(object):
         self._accept_pool_num = setting.get('accept_pool_size', 512)
         self._running = True
         self._wildcard_servant = None
-
-        self.__process_client_ips(setting)
-
-    def __process_client_ips(self, setting):
-        ips = setting.get('client_ips', [])
-        client_ips = {}
-        for ip in ips:
-            client_ips[ip] = True
-
-        self._client_ips = client_ips
-        self._client_ips_len = len(self._client_ips)
+        self._pool = None
 
     def __repr__(self):
         p = {}
+        p['servant_num'] = self._servant_worker_num
+        p['accept_pool_size'] = self._accept_pool_num
         p['endpoint'] = self._endpoint
-        p['servants'] = self._servants.keys()
+        p['servants'] = self._servants
+        p['pool_free_count'] = self._pool.free_count()
         return str(p)
 
     def get_name(self):
@@ -104,6 +97,7 @@ class Adapter(object):
                 query.inbox.put(Answer(query.qid, 1, self._make_exception_params(query)))
 
     def _handle_normal_servant(self, query):
+        called_method = query.method
         if self.debug and logger.is_debug():
             logger.get_logger().debug('handle_normal_servant: %s', query)
         servant = self._servants.get(query.service)
@@ -117,32 +111,23 @@ class Adapter(object):
             if query.qid:
                 query.inbox.put(Answer(query.qid, 1, exdict))
             else:
-                logger.get_logger().warning("%s.%s %s", query.service, query.method, exdict)
+                logger.get_logger().warning("%s.%s %s", query.service, called_method, exdict)
+            return
+
+        if called_method[0] == '\0':
+            callback = servant._special_callback(query)
+        else:
+            callback = servant.find_method(called_method)
+
+        if not callback:
+            self._method_not_found(called_method, query)
             return
 
         try:
-            if query.method[0] == '\0':
-                callback = servant._special_callback(query)
-            else:
-                callback = getattr(servant, query.method)
-        except AttributeError as ex:
-            logger.get_logger().error("method %s not found", query.method)
-            """
-            query method not found in servant
-            """
-            exdict = {}
-            exdict['exception'] = 'MethodNotFound'
-            exdict['code'] = 1
-            exdict['message'] = "servant %s do no have method %s in adapter %s" % (query.service, query.method, self._endpoint)
-            exdict['raiser'] = self._endpoint
-            if query.qid:
-                query.inbox.put(Answer(query.qid, 100, exdict))
-            else:
-                logger.get_logger().warning("%s.%s %s", query.service, query.method, exdict)
-            return
-
-        try:
+            time_start = time.time()
+            servant.before_method_call(called_method, time_start)
             result = callback(Params(query.params))
+            servant.after_method_call(called_method, time_start, (time.time() - time_start) * 1000)
             if query.qid:
                 result = dict(result)
                 query.inbox.put(Answer(query.qid, 0, result))
@@ -150,11 +135,27 @@ class Adapter(object):
             if query.qid:
                 query.inbox.put(Answer(query.qid, ex.status, ex.params))
             else:
-                logger.get_logger().warning("%s.%s %d %s", query.service, query.method, ex.status, ex.params)
+                logger.get_logger().warning("%s.%s %d %s", query.service, called_method, ex.status, ex.params)
         except:
             logger.get_logger().error("query %d handle fail", query.qid, exc_info = 1)
             if query.qid:
                 query.inbox.put(Answer(query.qid, 1, self._make_exception_params(query)))
+
+    def _method_not_found(self, called_method, query):
+        logger.get_logger().error("method %s not found", called_method)
+        """
+        query method not found in servant
+        """
+        exdict = {}
+        exdict['exception'] = 'MethodNotFound'
+        exdict['code'] = 1
+        exdict['message'] = "servant %s do no have method %s in adapter %s" % (query.service, called_method, self._endpoint)
+        exdict['raiser'] = self._endpoint
+        if query.qid:
+            query.inbox.put(Answer(query.qid, 100, exdict))
+        else:
+            logger.get_logger().warning("%s.%s %s", query.service, called_method, exdict)
+        return
 
     def servant_worker(self):
         while self._running:
@@ -171,13 +172,13 @@ class Adapter(object):
         for i in range(self._servant_worker_num):
             gevent.spawn(self.servant_worker)
 
-        pool = Pool(self._accept_pool_num)
+        self._pool = Pool(self._accept_pool_num)
         endpoint = self._endpoint
         try:
             service, proto, host, port = proxy.parse_endpoint(endpoint)
             if proto != 'tcp':
                 raise proxy.Error(1, 'only tcp server supported now')
-            server = StreamServer((host, int(port)), self.sokect_handler, spawn=pool)
+            server = StreamServer((host, int(port)), self.sokect_handler, spawn=self._pool)
             if self.debug and logger.is_debug():
                 logger.get_logger().debug('adapter start %s', endpoint)
             self._servers.append(server)
@@ -205,14 +206,6 @@ class Adapter(object):
             logger.get_logger().debug('%s: answer fiber stop', address)
 
     def sokect_handler(self, socket, address):
-        if self._client_ips_len > 0:
-            ip, port = address
-            if not ip in self._client_ips:
-                if self.debug and logger.is_debug():
-                    logger.get_logger().debug('%s: accept connection, but this address is not allowed', address)
-                socket.close()
-                return
-
         if self.debug and logger.is_debug():
             logger.get_logger().debug('%s: accept connection', address)
 
@@ -253,26 +246,17 @@ class Servant(object):
     def __init__(self, setting):
         self.setting = setting
         self.debug = setting.get('debug', False)
+        self.__reflection_service_methods()
 
-    """
-    Customized Servant implement this method to initialize
-    """
-    def init(self, engine, adapter, setting):
-        raise EngineError('You must implement init(self, engine, adapter')
-
-    def __reflection_service_methods__(self):
-        """
-        the service methods is the class method whose name does not start with underscore(_)
-
-        """
-        methods = []
+    def __reflection_service_methods(self):
+        method_map = {}
         for name in dir(self):
             attr = getattr(self,name)
             if name[0] == '_':
                 continue
             if callable(attr):
-                methods.append(name)
-        return methods
+                method_map[name] = attr
+        self.method_map = method_map
 
     def _special_callback(self, query):
         if query.method == '\0':
@@ -285,8 +269,23 @@ class Servant(object):
         special probe method for servants internal status
         """
         sta = {}
-        sta['methods'] = self.__reflection_service_methods__()
+        sta['methods'] = self.method_map.keys()
         return sta
+
+    def find_method(self, method):
+        if method in self.method_map:
+            return self.method_map[method]
+        return None
+
+    def before_method_call(self, method, time_start):
+        pass
+
+    def after_method_call(self, method, time_start, time_spent):
+        pass
+
+    def __repr__(self):
+        p = {}
+        return str(p)
 
 class Engine(object):
 

@@ -206,7 +206,7 @@ class Proxy(object):
         self._query_list = {}
         self._send_queue = Queue()
         self._send_thread = gevent.spawn(self.send_fiber)
-        self._reap_thread = gevent.spawn(self.reap_fiber)
+        self._reap_thread = gevent.spawn(self.timeout_fiber)
         self._connected = False
         self._running = True
 
@@ -245,7 +245,7 @@ class Proxy(object):
             self.pending[qid] = time.time()
 
         if self.debug and logger.is_debug():
-            logger.get_logger().debug('CQ:%d service=%s method=%s params=%s', qid, self.service, method, params)
+            logger.get_logger().debug('CQ:%d service=%s method=%s', qid, self.service, method)
 
         self.unitive_send(Messager.data_for_query(qid, self.service, method, params))
         return qid
@@ -265,9 +265,9 @@ class Proxy(object):
 
         if self.debug and logger.is_debug():
             if isinstance(message, Query):
-                logger.get_logger().debug('SQ:%d method=%s, params=%s', message.qid, message.method, message.params)
+                logger.get_logger().debug('SQ:%d method=%s', message.qid, message.method)
             elif isinstance(message, Answer):
-                logger.get_logger().debug('SA:%d status=%d, data=%s', message.qid, message.status, message.data)
+                logger.get_logger().debug('SA:%d status=%d', message.qid, message.status)
 
         if not message:
             raise Exception('Recieved Unknown packet')
@@ -281,7 +281,7 @@ class Proxy(object):
                 raise Error(qid, status, message.data)
         return message;
 
-    def reap_fiber(self):
+    def timeout_fiber(self):
         while True:
             try:
                 now = time.time()
@@ -368,7 +368,6 @@ class Proxy(object):
             result.set(msg)
 
     def emit_query(self, qid, method, params):
-        logger.get_logger().debug('emit_query: qid=%d, method=%s, params=%s', qid, method, params)
         self._send_queue.put((qid, method, params))
 
     def request_many(self, reqs):
@@ -413,7 +412,6 @@ class Proxy(object):
             msg = ar.get()
             if msg.status:
                 raise Error(qid, msg.status, msg.data)
-            logger.get_logger().debug('result: qid=%d, result=%s', msg.qid, msg.data)
             return msg.data
 
 def parse_endpoint(endpoint):

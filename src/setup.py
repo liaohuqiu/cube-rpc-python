@@ -6,7 +6,7 @@ setup(
     keywords = ('cube', 'cubi', 'cube-rpc'),
     description = 'python implementation for Cube RPC protocol',
     license = 'MIT License',
-    install_requires = ['bp', 'gevent'],
+    install_requires = ['bp', 'gevent', 'cpbox'],
 
     scripts = [],
 
