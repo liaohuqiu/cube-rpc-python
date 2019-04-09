@@ -330,12 +330,17 @@ class Proxy(object):
                     raise EngineError('Received nothing')
                 if isinstance(msg, Query):
                     raise EngineError('Recieved unexpected Query')
-                else : #set result
+                elif isinstance(msg, Close):
+                    self._process_close()
+                elif isinstance(msg, Answer):
                     if self._query_list.get(msg.qid):
                         self._query_list[msg.qid].set(msg)
                         del self._query_list[msg.qid]
                     else:
                         logger.get_logger().error('proxy %s get unexpected answer %s. qid may be removed for timeout', self.end_point, msg)
+                    raise EngineError('Recieved unexpected Query')
+                else:
+                    raise EngineError('Unknown message')
             except Error as ex:
                 if self._query_list.get(ex.qid):
                     msg = Answer(ex.qid, ex.status, ex.params)
@@ -346,6 +351,10 @@ class Proxy(object):
                 break
 
         self._fail_quests()
+
+    def _process_close(self):
+        logger.get_logger().info('_process_close')
+        pass
 
     def _build_except_info(self):
         exdict = {}

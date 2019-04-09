@@ -3,7 +3,7 @@ import cubi.utils as utils
 import cubi.params as params
 from cubi.engine import Servant;
 
-class SimpleServant(Servant):
+class EchoServant(Servant):
 
     def init(self, engine, adapter, setting):
         pass
@@ -18,4 +18,4 @@ class SimpleServant(Servant):
 
 if __name__ == '__main__':
 
-    utils.make_easy_engine(SimpleServant).serve_forever()
+    utils.make_easy_engine(EchoServant).serve_forever()

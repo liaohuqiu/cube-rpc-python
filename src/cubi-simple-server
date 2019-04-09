@@ -1,3 +1,0 @@
-#!/bin/bash
-
-python cubi-simple-server.py cubi-simple-server.conf

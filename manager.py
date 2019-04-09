@@ -66,5 +66,9 @@ class App(DevOpsApp):
     def test(self):
         self.logger.info('test')
 
+    def run_echo_server(self):
+        cmd = 'python src/cubi-echo-server.py roles/cubi-rpc/config/cubi-echo-server.yml'
+        self.shell_run(cmd)
+
 if __name__ == '__main__':
     functocli.run_app(App)

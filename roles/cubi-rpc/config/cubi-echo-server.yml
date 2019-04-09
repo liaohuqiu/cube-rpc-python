@@ -1,5 +1,5 @@
 debug: false
 log_level: info
-endpoint: simple-server@tcp:0.0.0.0:2014
+endpoint: echo@tcp:0.0.0.0:2014
 servant_num: 20480
 accept_pool_size: 20480

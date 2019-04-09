@@ -67,6 +67,9 @@ class Adapter(object):
         self._wildcard_servant = servant
 
     def add_servant(self, service, servant):
+        if service == '*':
+            self.add_wildcard_servant(servant)
+            return
         if self._wildcard_servant:
             raise EngineError("wildcard servant is set when add normal servant")
         self._servants[service] = servant

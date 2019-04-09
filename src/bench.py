@@ -4,7 +4,7 @@ import time
 from threading import Thread
 from gevent.pool import Pool
 import gevent.monkey
-gevent.monkey.patch_all(thread=False)
+gevent.monkey.patch_all()
 
 import cubi.proxy as proxy
 import cubi.logger as logger
@@ -14,10 +14,10 @@ concurrent_num = 1024
 def basic_test(endpoint, i):
 
     prx = proxy.Proxy(endpoint)
-    data = {'time': time.time()}
     for _ in range(request_time):
         try:
-            r = prx.request('hello', data)
+            data = {'msg': time.time()}
+            r = prx.request('echo', data)
         except Exception:
             import traceback
             print traceback.format_exc()
@@ -39,7 +39,7 @@ def stress_test(endp):
             t.join()
 
 def start_test(endp):
-    print 'start test for ', endp
+    print 'start test for', endp
     basic_test(endp, 0)
     print 'basic test ok'
     t1 = time.time();
@@ -49,5 +49,6 @@ def start_test(endp):
 
 if __name__ == '__main__':
     # logger.enable_debug_log()
-    endp = "simple-server@tcp::2014"
+    endp = "echo@tcp::2014"
+    # basic_test(endp, 1)
     start_test(endp)
