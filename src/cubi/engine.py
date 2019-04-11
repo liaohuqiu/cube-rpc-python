@@ -92,7 +92,7 @@ class Adapter(object):
             result = self._wildcard_servant(query.service, query.method, query.params)
             if query.qid:
                 query.inbox.put(Answer(query.qid, 0, result))
-        except proxy.Error as ex:
+        except proxy.ProxyError as ex:
             if query.qid:
                 query.inbox.put(Answer(ex.qid, ex.status, ex.params))
         except:
@@ -134,7 +134,7 @@ class Adapter(object):
             if query.qid:
                 result = dict(result)
                 query.inbox.put(Answer(query.qid, 0, result))
-        except proxy.Error as ex:
+        except proxy.ProxyError as ex:
             if query.qid:
                 query.inbox.put(Answer(query.qid, ex.status, ex.params))
             else:
@@ -180,7 +180,7 @@ class Adapter(object):
         try:
             service, proto, host, port = proxy.parse_endpoint(endpoint)
             if proto != 'tcp':
-                raise proxy.Error(1, 'only tcp server supported now')
+                raise proxy.ProxyError(1, 'only tcp server supported now')
             server = StreamServer((host, int(port)), self.sokect_handler, spawn=self._pool)
             if self.debug and logger.is_debug():
                 logger.get_logger().debug('adapter start %s', endpoint)

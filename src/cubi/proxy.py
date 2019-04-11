@@ -9,6 +9,8 @@ import bp
 import logger
 import traceback
 
+import engine
+
 import gevent
 from gevent.queue import Queue
 from gevent.event import AsyncResult
@@ -163,7 +165,7 @@ class Answer:
     def from_receive(data):
         return Answer(data[0], data[1], data[2])
 
-class Error(Exception):
+class ProxyError(Exception):
     def __init__(self, qid, status, params):
         self.status = status
         self.params = params
@@ -186,7 +188,7 @@ class Proxy(object):
 
         self.timeout = timeout
 
-        self.socket = None
+        self._socket = None
         self.reset()
 
     def stop(self):
@@ -196,15 +198,16 @@ class Proxy(object):
         self._recv_thread = None
         self._reap_thread = None
 
-        if self.socket:
-            self.socket.close()
-        self.socket = None
+        if self._socket:
+            self._socket.close()
+        self._socket = None
 
     def reset(self):
         self.last_id = 0
         self.pending = {}
         self._query_list = {}
         self._send_queue = Queue()
+        self._recv_thread = None
         self._send_thread = gevent.spawn(self.send_fiber)
         self._reap_thread = gevent.spawn(self.timeout_fiber)
         self._connected = False
@@ -216,17 +219,17 @@ class Proxy(object):
 
     def connect(self):
         if self.protocol == 'tcp':
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         elif self.protocol == 'udp':
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        self.socket.connect((self.host, self.port))
+        self._socket.connect((self.host, self.port))
         if self.debug and logger.is_debug():
-            ip, port = self.socket.getsockname()
+            ip, port = self._socket.getsockname()
             logger.get_logger().debug('address = %s:%d' % (ip, port))
 
         if self.welcome:
-            type = Messager.receive_msg_type(self.socket)
+            type = Messager.receive_msg_type(self._socket)
             if type != MESSAGE_TYPE_WELCOME:
                 raise Exception('Imcomplete message')
 
@@ -234,10 +237,10 @@ class Proxy(object):
                 logger.get_logger().debug('S.WELCOME')
 
     def unitive_send(self, data):
-        self.socket.sendall(data)
+        self._socket.sendall(data)
 
     def unitive_recvfrom(self, recvlen):
-        data = self.socket.recvfrom(recvlen)
+        data = self._socket.recvfrom(recvlen)
         return data
 
     def send_quest(self, qid, method, params, twoway=True):
@@ -257,7 +260,7 @@ class Proxy(object):
 
     def receive_next_msg(self):
         if self.protocol == 'tcp':
-            message = Messager.receive_msg(self.socket)
+            message = Messager.receive_msg(self._socket)
 
         elif self.protocol == 'udp':
             pkt, address = self.unitive_recvfrom(65535)
@@ -278,7 +281,7 @@ class Proxy(object):
                 del self.pending[qid]
             status = message.status
             if status:
-                raise Error(qid, status, message.data)
+                raise ProxyError(qid, status, message.data)
         return message;
 
     def timeout_fiber(self):
@@ -313,12 +316,10 @@ class Proxy(object):
                     self._connected = True
                     self._recv_thread = gevent.spawn(self.recv_fiber)
                 self.send_quest(qid, method, params)
-            except:
-                self.stop()
-                self._fail_quests()
-                if self._recv_thread:
-                    gevent.kill(self._recv_thread)
-                    self._recv_thread = None
+            except ProxyError as ex:
+                self.close()
+            except Exception as ex:
+                self.close()
             finally:
                 pass
 
@@ -327,47 +328,55 @@ class Proxy(object):
             try:
                 msg = self.receive_next_msg()
                 if msg == None:
-                    raise EngineError('Received nothing')
+                    raise engine.EngineError('Received nothing')
                 if isinstance(msg, Query):
-                    raise EngineError('Recieved unexpected Query')
+                    raise engine.EngineError('Recieved unexpected Query')
                 elif isinstance(msg, Close):
-                    self._process_close()
+                    self.close()
                 elif isinstance(msg, Answer):
                     if self._query_list.get(msg.qid):
                         self._query_list[msg.qid].set(msg)
                         del self._query_list[msg.qid]
                     else:
                         logger.get_logger().error('proxy %s get unexpected answer %s. qid may be removed for timeout', self.end_point, msg)
-                    raise EngineError('Recieved unexpected Query')
                 else:
-                    raise EngineError('Unknown message')
-            except Error as ex:
+                    raise engine.EngineError('Unknown message')
+            except ProxyError as ex:
                 if self._query_list.get(ex.qid):
                     msg = Answer(ex.qid, ex.status, ex.params)
                     self._query_list[ex.qid].set(msg)
                     del self._query_list[ex.qid]
-            except:
-                self.stop()
+            except Exception as ex:
+                self.close()
                 break
 
-        self._fail_quests()
+    def close(self):
+        logger.get_logger().info('close')
+        if self._recv_thread:
+            gevent.kill(self._recv_thread)
+            self._recv_thread = None
+        if self._socket:
+            self._socket.close()
+        self._socket = None
+        self._connected = False
 
-    def _process_close(self):
-        logger.get_logger().info('_process_close')
-        pass
+        self._fail_quests()
 
     def _build_except_info(self):
         exdict = {}
         exctype, exmsg, tb = sys.exc_info()
         exdict['exception'] = repr(exctype)
         exdict['code'] = 1
-        exdict['message'] = str(exmsg)
+        exdict['message'] = repr(exmsg)
+        exdict['raiser'] = self.end_point
         exdict['detail'] = {}
         exdict['detail']['what'] = repr(traceback.extract_tb(tb))
         return exdict
 
     def _fail_quests(self):
         exinfo = self._build_except_info()
+        import traceback
+        traceback.print_stack()
         logger.get_logger().error('proxy %s get error %s, fail current querys', self.end_point, exinfo)
         curr_req_items = self._query_list.items()
         self._query_list = {}
@@ -404,7 +413,7 @@ class Proxy(object):
             msg = ar.get()
             if msg:
                 if msg.status:
-                    yield Error(qid, msg.status, msg.params), idx
+                    yield ProxyError(qid, msg.status, msg.params), idx
                 else:
                     yield msg.data, idx
 
@@ -420,7 +429,7 @@ class Proxy(object):
         if twoway:
             msg = ar.get()
             if msg.status:
-                raise Error(qid, msg.status, msg.data)
+                raise ProxyError(qid, msg.status, msg.data)
             return msg.data
 
 def parse_endpoint(endpoint):
