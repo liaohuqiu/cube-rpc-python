@@ -301,8 +301,8 @@ class Engine(object):
         if self.debug and logger.is_debug():
             logger.get_logger().debug("application setting %s", setting)
 
-    def create_proxy(self, endpoint):
-        prx = proxy.Proxy(endpoint, self.debug)
+    def create_proxy(self, endpoint, timeout=6000):
+        prx = proxy.Proxy(endpoint, self.debug, timeout=timeout)
         self._proxies[endpoint] = prx
         return prx
 
