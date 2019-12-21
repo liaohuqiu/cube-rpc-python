@@ -12,7 +12,7 @@ setup(
         'cpbox',
     ],
 
-    scripts=['cubi-simple-server', 'cubi-simple-server-test', 'cubi-another-server', 'cubi-another-server-test'],
+    scripts=[],
 
     author='http://www.liaohuqiu.net',
     author_email='liaohuqiu@gmail.com',

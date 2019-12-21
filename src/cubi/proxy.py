@@ -15,12 +15,13 @@ import gevent
 from gevent.queue import Queue
 from gevent.event import AsyncResult
 
-MESSAGE_MAGIC               = 'CB'
-MESSAGE_VER                 = 0x01
-MESSAGE_TYPE_WELCOME        = 0x01
-MESSAGE_TYPE_CLOSE          = 0x02
-MESSAGE_TYPE_QUERY          = 0x03
-MESSAGE_TYPE_ANSWER         = 0x04
+MESSAGE_MAGIC = 'CB'
+MESSAGE_VER = 0x01
+MESSAGE_TYPE_WELCOME = 0x01
+MESSAGE_TYPE_CLOSE = 0x02
+MESSAGE_TYPE_QUERY = 0x03
+MESSAGE_TYPE_ANSWER = 0x04
+
 
 class Messager:
 
@@ -108,10 +109,10 @@ class Messager:
         elif type == MESSAGE_TYPE_CLOSE:
             return Close()
 
-        len = struct.unpack('<i', data[4:8])
+        size = struct.unpack('<i', data[4:8])
         if len(data) < 8 + size:
             return None
-        odata = pkt[8:8+size]
+        odata = data[8:8 + size]
 
         data = bp.decode(odata)
         if type == MESSAGE_TYPE_QUERY:
@@ -121,15 +122,18 @@ class Messager:
         else:
             return None
 
+
 class Welcome():
 
     def __repr__(self):
         return 'proxy.Welcome()'
 
+
 class Close:
 
     def __repr__(self):
         return 'proxy.Close()'
+
 
 class Query:
     def __init__(self, qid, service, method, params):
@@ -149,6 +153,7 @@ class Query:
         l = (self.qid, self.service, self.method, self.params)
         return 'proxy.Query(' + str(l) + ')'
 
+
 class Answer:
     def __init__(self, qid, status, data):
         self.qid = qid
@@ -165,6 +170,7 @@ class Answer:
     def from_receive(data):
         return Answer(data[0], data[1], data[2])
 
+
 class ProxyError(Exception):
     def __init__(self, qid, status, params):
         self.status = status
@@ -177,9 +183,10 @@ class ProxyError(Exception):
     def __repr__(self):
         return 'proxy.Error(' + str(self.params) + ')'
 
+
 class Proxy(object):
 
-    def __init__(self, end_point, timeout = 6000, welcome=True):
+    def __init__(self, end_point, timeout=6000, welcome=True):
         self.end_point = end_point
         self.welcome = welcome
 
@@ -213,7 +220,7 @@ class Proxy(object):
         self._running = True
 
     def next_qid(self):
-        self.last_id +=1;
+        self.last_id += 1;
         return self.last_id;
 
     def connect(self):
@@ -281,7 +288,8 @@ class Proxy(object):
                         exdict = {}
                         exdict['exception'] = 'QueryTimeoutError'
                         exdict['code'] = 1
-                        exdict['message'] = 'query %d recv timeout ctime %d now %d proxy timeout %dms' % (qid, ctime, now, self.timeout)
+                        exdict['message'] = 'query %d recv timeout ctime %d now %d proxy timeout %dms' % (
+                        qid, ctime, now, self.timeout)
                         exdict['detail'] = {}
                         if self._query_list.get(qid):
                             msg = Answer(qid, 1, exdict)
@@ -325,7 +333,8 @@ class Proxy(object):
                         self._query_list[msg.qid].set(msg)
                         del self._query_list[msg.qid]
                     else:
-                        logger.get_logger().error('proxy %s get unexpected answer %s. qid may be removed for timeout', self.end_point, msg)
+                        logger.get_logger().error('proxy %s get unexpected answer %s. qid may be removed for timeout',
+                                                  self.end_point, msg)
                 else:
                     raise params.EngineError('Unknown message')
             except ProxyError as ex:
@@ -369,7 +378,7 @@ class Proxy(object):
         self._query_list = {}
         for qid, result in curr_req_items:
             msg = Answer(qid, 1, exinfo)
-            #AsyncResult set should cause context switch
+            # AsyncResult set should cause context switch
             result.set(msg)
 
     def emit_query(self, qid, method, params):
@@ -404,7 +413,7 @@ class Proxy(object):
                 else:
                     yield msg.data, idx
 
-    def request(self, method, params, twoway = True):
+    def request(self, method, params, twoway=True):
         ar = AsyncResult()
         qid = 0;
         if twoway:
@@ -418,6 +427,7 @@ class Proxy(object):
             if msg.status:
                 raise ProxyError(qid, msg.status, msg.data)
             return msg.data
+
 
 def parse_endpoint(endpoint):
     x = endpoint.split('@')

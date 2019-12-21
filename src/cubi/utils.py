@@ -29,10 +29,9 @@ def make_easy_engine(servant_class, setting=None):
     env = setting.get('env', 'dev')
     debug = setting.get('debug', False)
     log_level = setting.get('log_level', 'info')
-    app = AppWrap('cube-rpc', env, log_level)
     if debug:
         log_level = 'debug'
-        cubelog.enable_debug_log()
+    app = AppWrap('cube-rpc', env, log_level)
     cplogger.make_logger_for_app(app)
 
     # endpoint

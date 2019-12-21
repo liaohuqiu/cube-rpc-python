@@ -1,25 +1,22 @@
 #! /bin/env python
 
-import cubi.engine as engine
-import cubi.logger as logger
+import cubi.params as params
 import cubi.utils as utils
 from cubi.engine import Servant
 
 
 class SimpleServant(Servant):
 
+    @params.extract_args
+    def echo(self, msg):
+        return {'msg': msg}
+
+    # return what client send to server
     def hello(self, params):
         return dict(params)
 
 
 if __name__ == '__main__':
-    # product logger level
-    # log = logger.get_console_logger(logging.DEBUG)
-    # logger.set_logger(log)
-
-    # deubg logger level
-    logger.enable_debug_log()
-
     endp = 'simple-server@0.0.0.0:2018'
     setting = {}
     setting['debug'] = True

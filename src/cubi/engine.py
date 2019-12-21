@@ -1,5 +1,4 @@
 import sys
-import sys
 import time
 import traceback
 
@@ -9,13 +8,15 @@ from gevent.pool import Pool
 from gevent.queue import Queue
 from gevent.server import StreamServer
 
-#patch_all() patch_thread() may cause thread exception at the end of app
+# patch_all() patch_thread() may cause thread exception at the end of app
 gevent.monkey.patch_all(thread=False)
 
 import logger
 import proxy
+import params
 from cubi.proxy import Query, Answer, Messager
 from cubi.params import Params
+
 
 class Adapter(object):
 
@@ -50,7 +51,7 @@ class Adapter(object):
     # for somthing like proxy
     def add_wildcard_servant(self, servant):
         if len(self.servant) > 0:
-            raise EngineError("normal servant is not empty when add wildcard servant")
+            raise params.EngineError("normal servant is not empty when add wildcard servant")
         self._wildcard_servant = servant
 
     def add_servant(self, service, servant):
@@ -58,7 +59,7 @@ class Adapter(object):
             self.add_wildcard_servant(servant)
             return
         if self._wildcard_servant:
-            raise EngineError("wildcard servant is set when add normal servant")
+            raise params.EngineError("wildcard servant is set when add normal servant")
         self._servants[service] = servant
 
     def _make_exception_params(self, query):
@@ -67,7 +68,7 @@ class Adapter(object):
         exdict['exception'] = repr(exctype)
         exdict['code'] = 1
         exdict['message'] = repr(exmsg)
-        exdict['raiser'] = query.method + "*" + query.service  + self._endpoint
+        exdict['raiser'] = query.method + "*" + query.service + self._endpoint
         exdict['detail'] = {}
         exdict['detail']['what'] = repr(traceback.extract_tb(tb))
         return exdict
@@ -90,7 +91,7 @@ class Adapter(object):
         logger.get_logger().debug('handle_normal_servant: %s', query)
         servant = self._servants.get(query.service)
         if not servant:
-            #build exception at params
+            # build exception at params
             exdict = {}
             exdict['exception'] = 'ServantNotFound'
             exdict['code'] = 1
@@ -125,7 +126,7 @@ class Adapter(object):
             else:
                 logger.get_logger().warning("%s.%s %d %s", query.service, called_method, ex.status, ex.params)
         except:
-            logger.get_logger().error("query %d handle fail", query.qid, exc_info = 1)
+            logger.get_logger().error("query %d handle fail", query.qid, exc_info=1)
             if query.qid:
                 query.inbox.put(Answer(query.qid, 1, self._make_exception_params(query)))
 
@@ -137,7 +138,8 @@ class Adapter(object):
         exdict = {}
         exdict['exception'] = 'MethodNotFound'
         exdict['code'] = 1
-        exdict['message'] = "servant %s do no have method %s in adapter %s" % (query.service, called_method, self._endpoint)
+        exdict['message'] = "servant %s do no have method %s in adapter %s" % (
+        query.service, called_method, self._endpoint)
         exdict['raiser'] = self._endpoint
         if query.qid:
             query.inbox.put(Answer(query.qid, 100, exdict))
@@ -169,7 +171,7 @@ class Adapter(object):
             self._servers.append(server)
             server.start()
         except:
-            logger.get_logger().error('start adapter fail %s', endpoint, exc_info = 1)
+            logger.get_logger().error('start adapter fail %s', endpoint, exc_info=1)
 
     def deactivate(self):
         for server in self._servers:
@@ -219,6 +221,7 @@ class Adapter(object):
         # stop answer thread
         conn_inbox.put(StopIteration)
 
+
 class Servant(object):
 
     def __init__(self, engine):
@@ -228,7 +231,7 @@ class Servant(object):
     def __reflection_service_methods(self):
         method_map = {}
         for name in dir(self):
-            attr = getattr(self,name)
+            attr = getattr(self, name)
             if name[0] == '_':
                 continue
             if callable(attr):
@@ -263,6 +266,7 @@ class Servant(object):
     def __repr__(self):
         p = {}
         return str(p)
+
 
 class Engine(object):
 

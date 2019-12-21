@@ -1,7 +1,6 @@
 #! /bin/env python
 
 import time
-
 import gevent.monkey
 from gevent.pool import Pool
 
@@ -53,4 +52,3 @@ def start_test(endp):
 if __name__ == '__main__':
     endp = "another-server@127.0.0.1:2019"
     start_test(endp)
-    print 'basic test ok'

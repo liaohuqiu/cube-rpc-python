@@ -2,9 +2,9 @@
 
 import time
 
-from cubi import utils
 import cubi.logger as logger
 import cubi.params as params
+import cubi.utils as utils
 from cubi.engine import Servant
 
 
@@ -12,10 +12,10 @@ class AnotherServant(Servant):
 
     def __init__(self, engine):
         Servant.__init__(self, engine)
-        self._simple_server = engine.create_proxy('simple-server@127.0.0.1:2018')
+        self._simple_server_proxy = engine.create_proxy('simple-server@127.0.0.1:2018')
 
     def hello(self, params):
-        return self._simple_server.request('hello', dict(params))
+        return self._simple_server_proxy.request('hello', dict(params))
 
     def check(self, params):
         i = params.want_integer('i')
@@ -38,7 +38,7 @@ class AnotherServant(Servant):
     def hello_all(self, msgs):
         reqs = [['hello', msg] for msg in msgs]
         result = []
-        for r, req in self._simple_server.request_many(reqs):
+        for r, req in self._simple_server_proxy.request_many(reqs):
             result.append((r, req))
         return {'r': result}
 
@@ -54,8 +54,6 @@ class AnotherServant(Servant):
 
 
 if __name__ == '__main__':
-    logger.enable_debug_log()
-
     endp = 'another-server@0.0.0.0:2019'
     setting = {}
     setting['debug'] = True
