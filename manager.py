@@ -11,8 +11,8 @@ from cpbox.app.devops import DevOpsApp
 
 APP_NAME = 'cubi-rpc'
 version = '1.0'
-image_name = 'docker.yizhoucp.cn/liaohuqiu/cubi-rpc-dev:' + version
-image_name_push = 'docker-publish.yizhoucp.cn/liaohuqiu/cubi-rpc-dev:' + version
+image_name = 'docker.vhash.io/liaohuqiu/cubi-rpc-dev:' + version
+image_name_push = 'docker-publish.vhash.io/liaohuqiu/cubi-rpc-dev:' + version
 
 class App(DevOpsApp):
 
