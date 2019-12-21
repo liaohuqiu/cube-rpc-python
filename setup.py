@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='cubi',
-    version='0.1',
+    version='0.1.1',
     keywords=('cube', 'cubi', 'cube-rpc'),
     description='python implementation for Cube RPC protocol',
     license='MIT License',

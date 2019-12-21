@@ -1,69 +1,133 @@
-## The Cube RPC protocal
+# Install
 
-### Message Type
+* Install from pip
 
-There are four kinds of message:
+```sh
+pip install cubi
+```
 
-*   Requset   (From client to server)
-*   Answer  (From server to client)
-*   Welcome (From server to client)
-*   Close   (client to server, or server to client)
+* Install from source
 
-All the messages contain a header, but only `Requset` and `Answer` contain a body.
+Clone this project or download the source code, then
 
-When the server receive a new connection, it must send the `Welcome` message to the client.
+```sh
+python setup.py install
+```
 
-Only after the `Welcome` message has been recieved, the client can sent the `Request`.
+# Implement a service
 
-##### disconnect gracefully
+* Code for service: 
 
-If the Server or the Client want to close the connection gracefully. It must send the `Close` message.
+    Here is a simple service, this service just return what client send to server.
 
-The other side will close the socket connection after recieve the `Close` message.
+    [`cubi-simple-server.py`](https://github.com/liaohuqiu/cube-rpc-python/blob/master/cubi-simple-server.py)
 
-The sponser close the connection after detect the socket has been disconnected.
 
-#### Header
+    ```python
+    import cubi.utils as utils
+    from cubi.engine import Servant;
 
-The header is 4 or 8 bytes long.
+    class SimpleServant(Servant):
 
-    byte    "C"
-    byte    "B"
-    byte    version
-    byte    message_type
+        def init(self, engine, adapter, setting):
+            pass
 
-    int32   body_size;               // little endian byte order, not network byte order
+        # return what client send to server
+        def hello(self, params):
+            return dict(params)
 
-The header of Welcome and Close is 4 bytes long. does not have body_size.
+    if __name__ == '__main__':
+        utils.make_easy_engine(SimpleServant).serve_forever()
+    ```
 
-##### Message Type
+    Then run it: 
+    
+    ```
+    python cubi-simple-server.py cubi-simple-server.conf
+    ```
 
-    MESSAGE_TYPE_WELCOME        = 0x01
-    MESSAGE_TYPE_CLOSE          = 0x02
-    MESSAGE_TYPE_QUEST          = 0x03
-    MESSAGE_TYPE_ANSWER         = 0x04
+* Code for client:
 
-### Body
+    [`cubi-simple-server-test.py`](https://github.com/liaohuqiu/cube-rpc-python/blob/master/cubi-simple-server-test.py)
 
-#### Requset Body
+    ```
+    import time
 
-    integer rid;
-    string  service;
-    string  method;
-    dict    params;
+    import cubi.proxy as proxy
+    import cubi.logger as logger
 
-#### Answer Body
+    import gevent.monkey
+    gevent.monkey.patch_all()
 
-    integer rid;
-    integer status;
-    dict    data;
+    if __name__ == '__main__':
 
-If the answer is a normal response, status is 0, else status is none-zero and data must contain the following data:
+        endp = "simple-server@tcp::2014"
+        print 'start test for ', endp
+        prx = proxy.Proxy(endp, True)
 
-|Key|Value type|description|
-|---|---|---|
-|exception    | string           | exception name|
-|code         | int           | |
-|message      | string           | |
-|raiser       | string           | method*service @proto:host:port|
-|detail       | dict      | |
+        data = {'time': time.time()}
+        r = prx.request('hello', data)
+        print 'result: %s' % r
+    ```
+
+    Run it: `python cubi-simple-server-test.py`
+
+### Config file
+
+An example:
+
+```
+{
+    "endpoint": "simple-server@tcp:0.0.0.0:2014",
+    "servant_num": 512,
+    "accept_pool_size": 512,
+    "debug": false,
+    "console_log_level": "debug",
+    "client_ips": ["127.0.0.1"],
+    "app":  {
+    }
+}
+```
+
+* endpoint
+
+    Format: `service_name@protocal:ip:port`
+    Example: `simple-server@tcp:0.0.0.0:2014`
+
+* servant_num
+
+    The default value is 512.
+
+* accept_pool_size
+
+    The default value is 512.
+
+* debug
+
+    If is set and value is `True`, will call `logger.enable_debug_log()` to enable debug log.
+
+    And the `debug` field in `Adapter`, `Engine`, `Proxy`, `Servant` will set to `True`.
+
+* console_log_level
+
+    If has this field, will enable console logger with specified log_level
+
+    ```
+    debug
+    info
+    warning   // default
+    error
+    critical
+    ```
+
+* client_ips
+
+    If is set and not empty, only the ip address in this list can access the service.
+
+* app
+
+    The config for application.
+
+### License
+
+MIT License

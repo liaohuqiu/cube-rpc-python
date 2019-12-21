@@ -19,11 +19,11 @@ class App(DevOpsApp):
     def sdist(self):
         cmd = 'rm -rf dist'
         self.shell_run(cmd)
-        cmd = 'python src/setup.py sdist'
+        cmd = 'python setup.py sdist'
         self.shell_run(cmd)
 
     def develop(self):
-        cmd = 'python src/setup.py develop --user'
+        cmd = 'python setup.py develop --user'
         self.shell_run(cmd)
 
     def upload(self):
@@ -90,10 +90,6 @@ class App(DevOpsApp):
 
     def test(self):
         self.logger.info('test')
-
-    def run_echo_server(self):
-        cmd = 'python src/cubi-echo-server.py roles/cubi-rpc/config/cubi-echo-server.yml'
-        self.shell_run(cmd)
 
 
 if __name__ == '__main__':
