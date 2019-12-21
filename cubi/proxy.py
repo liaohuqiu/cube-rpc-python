@@ -9,6 +9,8 @@ import bp
 import logger
 import traceback
 
+import params
+
 import gevent
 from gevent.queue import Queue
 from gevent.event import AsyncResult
@@ -24,21 +26,21 @@ class Messager:
 
     @staticmethod
     def data_for_welcome():
-        return struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME, 0)
+        return struct.pack('<2s2B', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME)
 
     @staticmethod
     def data_for_close():
-        return struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME, 0)
+        return struct.pack('<2s2B', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_WELCOME)
 
     @staticmethod
     def data_for_query(qid, service, method, params):
-        s = bp.pack((qid, service, method, params))
+        s = bp.encode((qid, service, method, params))
         header = struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_QUERY, len(s))
         return header + str(s)
 
     @staticmethod
     def data_for_answer(qid, status, data):
-        s = bp.pack((qid, status, data))
+        s = bp.encode((qid, status, data))
         header = struct.pack('<2s2Bi', MESSAGE_MAGIC, MESSAGE_VER, MESSAGE_TYPE_ANSWER, len(s))
         return header + str(s)
 
@@ -53,19 +55,21 @@ class Messager:
         return data
 
     @staticmethod
-    def receive_msg(socket, want_type = -1):
-        header_str = Messager.receive_data(socket, 8)
+    def receive_msg_type(socket):
+        header_str = Messager.receive_data(socket, 4)
         if not header_str:
             return None
 
-        header = struct.unpack('<2s2Bi', header_str)
+        header = struct.unpack('<2s2B', header_str)
         if header[0] != MESSAGE_MAGIC or header[1] != MESSAGE_VER:
             return None
+        return header[2]
 
-        type = header[2]
-        len = header[3]
+    @staticmethod
+    def receive_msg(socket):
+        type = Messager.receive_msg_type(socket)
 
-        if want_type != -1 and type != type:
+        if not type:
             return None
 
         if type == MESSAGE_TYPE_WELCOME:
@@ -73,8 +77,14 @@ class Messager:
         elif type == MESSAGE_TYPE_CLOSE:
             return Close()
 
+        len_str = Messager.receive_data(socket, 4)
+        if not len_str:
+            return None
+        len = struct.unpack('<i', len_str)
+        len = len[0]
+
         body = Messager.receive_data(socket, len)
-        data = bp.unpack(body)[1:]
+        data = bp.decode(body)
 
         if type == MESSAGE_TYPE_QUERY:
             return Query.from_receive(data)
@@ -103,7 +113,7 @@ class Messager:
             return None
         odata = pkt[8:8+size]
 
-        data = bp.unpack(odata)[1:]
+        data = bp.decode(odata)
         if type == MESSAGE_TYPE_QUERY:
             return Query.from_receive(data)
         elif type == MESSAGE_TYPE_ANSWER:
@@ -155,7 +165,7 @@ class Answer:
     def from_receive(data):
         return Answer(data[0], data[1], data[2])
 
-class Error(Exception):
+class ProxyError(Exception):
     def __init__(self, qid, status, params):
         self.status = status
         self.params = params
@@ -169,44 +179,37 @@ class Error(Exception):
 
 class Proxy(object):
 
-    def __init__(self, end_point, debug=False, timeout = 6000, welcome=True):
+    def __init__(self, end_point, timeout = 6000, welcome=True):
         self.end_point = end_point
-        self.debug = debug
         self.welcome = welcome
 
-        self.service, self.protocol, self.host, self.port = parse_endpoint(end_point)
+        self.service, self.host, self.port = parse_endpoint(end_point)
 
         self.timeout = timeout
 
+        self._socket = None
         self.reset()
 
     def stop(self):
 
-        if self.socket:
-            self.socket.close()
-        self.reset()
-
-    def reset(self):
-
-        self.socket = None
-        self.last_id = 0
-
         self._running = False
         self._connected = False
-
         self._recv_thread = None
         self._reap_thread = None
-        self._send_thread = None
 
+        if self._socket:
+            self._socket.close()
+        self._socket = None
+
+    def reset(self):
+        self.last_id = 0
         self.pending = {}
         self._query_list = {}
         self._send_queue = Queue()
-
-    def start(self):
-
+        self._recv_thread = None
         self._send_thread = gevent.spawn(self.send_fiber)
-        self._recv_thread = gevent.spawn(self.recv_fiber)
-        self._reap_thread = gevent.spawn(self.reap_fiber)
+        self._reap_thread = gevent.spawn(self.timeout_fiber)
+        self._connected = False
         self._running = True
 
     def next_qid(self):
@@ -214,65 +217,47 @@ class Proxy(object):
         return self.last_id;
 
     def connect(self):
-        if self.protocol == 'tcp':
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        elif self.protocol == 'udp':
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        self.socket.connect((self.host, self.port))
-        if self.debug and logger.is_debug():
-            ip, port = self.socket.getsockname()
-            logger.get_logger().debug('address = %s:%d' % (ip, port))
+        self._socket.connect((self.host, self.port))
+
+        ip, port = self._socket.getsockname()
+        logger.get_logger().debug('address = %s:%d' % (ip, port))
 
         if self.welcome:
-            msg = Messager.receive_msg(self.socket, MESSAGE_TYPE_WELCOME)
-
-            if not msg:
+            type = Messager.receive_msg_type(self._socket)
+            if type != MESSAGE_TYPE_WELCOME:
                 raise Exception('Imcomplete message')
 
-            if self.debug and logger.is_debug():
-                logger.get_logger().debug('S.WELCOME')
+            logger.get_logger().debug('S.WELCOME')
 
     def unitive_send(self, data):
-        self.socket.sendall(data)
+        self._socket.sendall(data)
 
     def unitive_recvfrom(self, recvlen):
-        data = self.socket.recvfrom(recvlen)
+        data = self._socket.recvfrom(recvlen)
         return data
 
-    def _send_quest(self, qid, method, params):
-
-        if not self._connected:
-            self.connect()
-            self._connected = True
-
+    def send_quest(self, qid, method, params, twoway=True):
         if qid:
             self.pending[qid] = time.time()
 
-        if self.debug and logger.is_debug():
-            logger.get_logger().debug('CQ:%d service=%s method=%s params=%s', qid, self.service, method, params)
+        logger.get_logger().debug('CQ:%d service=%s method=%s', qid, self.service, method)
 
         self.unitive_send(Messager.data_for_query(qid, self.service, method, params))
         return qid
 
     def send_answer(self, qid, status, data):
-        if self.debug and logger.is_debug():
-            logger.get_logger().debug('CA:%d %d %s', qid, status, data)
+        logger.get_logger().debug('CA:%d %d %s', qid, status, data)
         self.unitive_send(Messager.data_for_answer(qid, status, data))
 
     def receive_next_msg(self):
-        if self.protocol == 'tcp':
-            message = Messager.receive_msg(self.socket)
+        message = Messager.receive_msg(self._socket)
 
-        elif self.protocol == 'udp':
-            pkt, address = self.unitive_recvfrom(65535)
-            message = Messager.message_from_data(pkt)
-
-        if self.debug and logger.is_debug():
-            if isinstance(message, Query):
-                logger.get_logger().debug('SQ:%d method=%s, params=%s', message.qid, message.method, message.params)
-            elif isinstance(message, Answer):
-                logger.get_logger().debug('SA:%d status=%d, data=%s', message.qid, message.status, message.data)
+        if isinstance(message, Query):
+            logger.get_logger().debug('SQ:%d method=%s', message.qid, message.method)
+        elif isinstance(message, Answer):
+            logger.get_logger().debug('SA:%d status=%d', message.qid, message.status)
 
         if not message:
             raise Exception('Recieved Unknown packet')
@@ -283,10 +268,10 @@ class Proxy(object):
                 del self.pending[qid]
             status = message.status
             if status:
-                raise Error(qid, status, message.data)
+                raise ProxyError(qid, status, message.data)
         return message;
 
-    def reap_fiber(self):
+    def timeout_fiber(self):
         while True:
             try:
                 now = time.time()
@@ -313,14 +298,15 @@ class Proxy(object):
             qid = None
             try:
                 qid, method, params = self._send_queue.get()
-                self._send_quest(qid, method, params)
-
-            except:
-                self.stop()
-                self._fail_quests()
-                if self._recv_thread:
-                    gevent.kill(self._recv_thread)
-                    self._recv_thread = None
+                if not self._connected:
+                    self.connect()
+                    self._connected = True
+                    self._recv_thread = gevent.spawn(self.recv_fiber)
+                self.send_quest(qid, method, params)
+            except ProxyError as ex:
+                self.close()
+            except Exception as ex:
+                self.close()
             finally:
                 pass
 
@@ -329,24 +315,37 @@ class Proxy(object):
             try:
                 msg = self.receive_next_msg()
                 if msg == None:
-                    raise EngineError('Received nothing')
+                    raise params.EngineError('Received nothing')
                 if isinstance(msg, Query):
-                    raise EngineError('Recieved unexpected Query')
-                else : #set result
+                    raise params.EngineError('Recieved unexpected Query')
+                elif isinstance(msg, Close):
+                    self.close()
+                elif isinstance(msg, Answer):
                     if self._query_list.get(msg.qid):
                         self._query_list[msg.qid].set(msg)
                         del self._query_list[msg.qid]
                     else:
-                        logger.get_logger().error(  \
-                                'proxy %s get unexpected answer %s. qid may be removed for timeout', self.end_point, msg)
-            except Error as ex:
+                        logger.get_logger().error('proxy %s get unexpected answer %s. qid may be removed for timeout', self.end_point, msg)
+                else:
+                    raise params.EngineError('Unknown message')
+            except ProxyError as ex:
                 if self._query_list.get(ex.qid):
                     msg = Answer(ex.qid, ex.status, ex.params)
                     self._query_list[ex.qid].set(msg)
                     del self._query_list[ex.qid]
-            except:
-                self.stop()
+            except Exception as ex:
+                self.close()
                 break
+
+    def close(self):
+        logger.get_logger().info('close')
+        if self._recv_thread:
+            gevent.kill(self._recv_thread)
+            self._recv_thread = None
+        if self._socket:
+            self._socket.close()
+        self._socket = None
+        self._connected = False
 
         self._fail_quests()
 
@@ -355,13 +354,16 @@ class Proxy(object):
         exctype, exmsg, tb = sys.exc_info()
         exdict['exception'] = repr(exctype)
         exdict['code'] = 1
-        exdict['message'] = str(exmsg)
+        exdict['message'] = repr(exmsg)
+        exdict['raiser'] = self.end_point
         exdict['detail'] = {}
         exdict['detail']['what'] = repr(traceback.extract_tb(tb))
         return exdict
 
     def _fail_quests(self):
         exinfo = self._build_except_info()
+        import traceback
+        traceback.print_stack()
         logger.get_logger().error('proxy %s get error %s, fail current querys', self.end_point, exinfo)
         curr_req_items = self._query_list.items()
         self._query_list = {}
@@ -371,7 +373,6 @@ class Proxy(object):
             result.set(msg)
 
     def emit_query(self, qid, method, params):
-        logger.get_logger().debug('emit_query: qid=%d, method=%s, params=%s', qid, method, params)
         self._send_queue.put((qid, method, params))
 
     def request_many(self, reqs):
@@ -399,29 +400,9 @@ class Proxy(object):
             msg = ar.get()
             if msg:
                 if msg.status:
-                    yield Error(qid, msg.status, msg.params), idx
+                    yield ProxyError(qid, msg.status, msg.params), idx
                 else:
                     yield msg.data, idx
-
-    def request_blocking(self, method, params):
-        qid = self.next_qid()
-        self._send_quest(qid, method, params)
-        try:
-            msg = self.receive_next_msg()
-            if msg == None:
-                raise EngineError('Received nothing')
-            if isinstance(msg, Query):
-                raise EngineError('Recieved unexpected Query')
-            else :
-                return msg.data
-
-        except Error as ex:
-            if self._query_list.get(ex.qid):
-                msg = Answer(ex.qid, ex.status, ex.params)
-                return msg
-        except:
-            self.stop()
-        return None
 
     def request(self, method, params, twoway = True):
         ar = AsyncResult()
@@ -435,8 +416,7 @@ class Proxy(object):
         if twoway:
             msg = ar.get()
             if msg.status:
-                raise Error(qid, msg.status, msg.data)
-            logger.get_logger().debug('result: qid=%d, result=%s', msg.qid, msg.data)
+                raise ProxyError(qid, msg.status, msg.data)
             return msg.data
 
 def parse_endpoint(endpoint):
@@ -444,13 +424,10 @@ def parse_endpoint(endpoint):
     service = x[0].strip()
 
     z = x[1].split()
-    protocol, host, port = z[0].split(':')
-
-    if protocol == '':
-        protocol = 'tcp'
+    host, port = z[0].split(':')
 
     if len(host.strip()) == 0:
         host = '127.0.0.1'
 
     port = int(port)
-    return service, protocol, host, port
+    return service, host, port

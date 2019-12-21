@@ -1,3 +1,6 @@
+class EngineError(Exception):
+    pass
+
 def assert_integer(k):
     return assert_param(k, int, long)
 
